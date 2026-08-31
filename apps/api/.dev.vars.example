@@ -7,5 +7,8 @@ DATABASE_URL=postgresql://USER:PASSWORD@HOST-pooler.REGION.aws.neon.tech/DBNAME?
 # Neon Auth base URL 
 NEON_AUTH_BASE_URL=https://REPLACE-ME.example.com
 
-#CORS
+# CORS
 WEB_ORIGIN=http://localhost:3000
+
+# Resend API Key for email notifications
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxx
