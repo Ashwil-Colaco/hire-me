@@ -6,10 +6,7 @@ import type { Database, NewNotification, Notification } from '@repo/db'
  * 1. Fetch all notifications for a specific user.
  * Ordered by creation timestamp descending so newest notifications appear first.
  */
-export async function listNotifications(
-  db: Database,
-  userId: string,
-): Promise<Notification[]> {
+export async function listNotifications(db: Database, userId: string): Promise<Notification[]> {
   return db
     .select()
     .from(notifications)
@@ -25,10 +22,7 @@ export async function createNotification(
   db: Database,
   input: NewNotification,
 ): Promise<Notification | null> {
-  const [newNotif] = await db
-    .insert(notifications)
-    .values(input)
-    .returning()
+  const [newNotif] = await db.insert(notifications).values(input).returning()
   return newNotif ?? null
 }
 

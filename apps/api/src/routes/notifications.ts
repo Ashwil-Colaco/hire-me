@@ -49,10 +49,10 @@ const notificationsRouter = new Hono<NotificationsEnv>()
  */
 notificationsRouter.post('/send-email', zValidator('json', sendEmailSchema), async (c) => {
   const { studentEmail, postingTitle, companyName, status } = c.req.valid('json')
-  
+
   // Read Resend API Key from Cloudflare Worker environment bindings
   const bindings = env<{ RESEND_API_KEY?: string }>(c)
-  
+
   const result = await sendEmail(
     bindings.RESEND_API_KEY,
     studentEmail,
@@ -62,7 +62,6 @@ notificationsRouter.post('/send-email', zValidator('json', sendEmailSchema), asy
   )
   return c.json({ data: result })
 })
-
 
 // All routes declared below this line will require a verified Authorization token
 notificationsRouter.use('*', requireAuth)
@@ -74,7 +73,7 @@ notificationsRouter.use('*', requireAuth)
 notificationsRouter.get('/', async (c) => {
   const db = c.var.db
   const authUser = c.var.authUser // Populated by requireAuth middleware
-  
+
   const data = await listNotifications(db, authUser.id)
   return c.json({ data })
 })
@@ -86,7 +85,7 @@ notificationsRouter.get('/', async (c) => {
 notificationsRouter.post('/', zValidator('json', createNotificationSchema), async (c) => {
   const db = c.var.db
   const input = c.req.valid('json')
-  
+
   const data = await createNotification(db, input)
   if (!data) {
     return c.json({ error: 'Failed to create notification' }, 500)
@@ -102,13 +101,13 @@ notificationsRouter.patch('/:id/read', async (c) => {
   const db = c.var.db
   const authUser = c.var.authUser
   const id = c.req.param('id')
-  
+
   // Basic UUID check
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   if (!uuidRegex.test(id)) {
     return c.json({ error: 'Notification not found' }, 404)
   }
-  
+
   const data = await markNotificationAsRead(db, authUser.id, id)
   if (!data) {
     return c.json({ error: 'Notification not found' }, 404)
@@ -123,7 +122,7 @@ notificationsRouter.patch('/:id/read', async (c) => {
 notificationsRouter.post('/read-all', async (c) => {
   const db = c.var.db
   const authUser = c.var.authUser
-  
+
   const data = await markAllNotificationsAsRead(db, authUser.id)
   return c.json({ data })
 })
