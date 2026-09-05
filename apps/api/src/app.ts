@@ -9,7 +9,13 @@ import { notificationsRouter } from './routes/notifications.js'
 import { clubMembersRouter } from './routes/club-members.js'
 
 const app = new Hono<{
-  Bindings: { DATABASE_URL: string; NEON_AUTH_BASE_URL: string; WEB_ORIGIN: string }
+  Bindings: {
+    DATABASE_URL: string
+    NEON_AUTH_BASE_URL: string
+    WEB_ORIGIN: string
+    INTERNAL_SERVICE_KEY?: string
+    RESEND_API_KEY?: string
+  }
 }>()
 
 app.use('*', logger())
@@ -24,7 +30,7 @@ app.use(
   cors({
     origin: (_origin, c) => env<{ WEB_ORIGIN?: string }>(c).WEB_ORIGIN ?? 'http://localhost:3000',
     allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['authorization', 'content-type'],
+    allowHeaders: ['authorization', 'content-type', 'x-service-key'],
     maxAge: 86400,
   }),
 )

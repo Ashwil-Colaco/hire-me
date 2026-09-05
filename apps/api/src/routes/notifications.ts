@@ -3,6 +3,7 @@ import { env } from 'hono/adapter'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { requireAuth } from '../middleware/auth.js'
+import { requireServiceAuth } from '../middleware/service-auth.js'
 import type { AuthVariables } from '../middleware/auth.js'
 import type { DbVariables } from '../middleware/db.js'
 import {
@@ -15,7 +16,12 @@ import {
 
 // Define the environment variables and context type for our Hono Router
 type NotificationsEnv = {
-  Bindings: { DATABASE_URL: string }
+  Bindings: {
+    DATABASE_URL: string
+    NEON_AUTH_BASE_URL: string
+    INTERNAL_SERVICE_KEY?: string
+    RESEND_API_KEY?: string
+  }
   Variables: DbVariables & AuthVariables
 }
 
@@ -43,53 +49,70 @@ const createNotificationSchema = z.object({
 
 const notificationsRouter = new Hono<NotificationsEnv>()
 
+// ==========================================
+// SERVICE-TO-SERVICE ROUTES (x-service-key)
+// ==========================================
+
 /**
- * Endpoint to simulate email dispatch.
- * Does not strictly require JWT login in order to allow internal services or system scripts to send emails.
+ * POST /api/notifications/send-email
+ * Internal service endpoint to simulate or dispatch email notifications.
+ * Protected by service-to-service shared secret (x-service-key).
  */
-notificationsRouter.post('/send-email', zValidator('json', sendEmailSchema), async (c) => {
-  const { studentEmail, postingTitle, companyName, status } = c.req.valid('json')
+notificationsRouter.post(
+  '/send-email',
+  requireServiceAuth,
+  zValidator('json', sendEmailSchema),
+  async (c) => {
+    const { studentEmail, postingTitle, companyName, status } = c.req.valid('json')
 
-  // Read Resend API Key from Cloudflare Worker environment bindings
-  const bindings = env<{ RESEND_API_KEY?: string }>(c)
+    // Read Resend API Key from Cloudflare Worker environment bindings
+    const bindings = env<{ RESEND_API_KEY?: string }>(c)
 
-  const result = await sendEmail(
-    bindings.RESEND_API_KEY,
-    studentEmail,
-    postingTitle,
-    companyName,
-    status,
-  )
-  return c.json({ data: result })
-})
+    const result = await sendEmail(
+      bindings.RESEND_API_KEY,
+      studentEmail,
+      postingTitle,
+      companyName,
+      status,
+    )
+    return c.json({ data: result })
+  },
+)
 
-// All routes declared below this line will require a verified Authorization token
-notificationsRouter.use('*', requireAuth)
+/**
+ * POST /api/notifications
+ * Internal service endpoint to create a notification record for a specific user.
+ * Protected by service-to-service shared secret (x-service-key).
+ */
+notificationsRouter.post(
+  '/',
+  requireServiceAuth,
+  zValidator('json', createNotificationSchema),
+  async (c) => {
+    const db = c.var.db
+    const input = c.req.valid('json')
+
+    const data = await createNotification(db, input)
+    if (!data) {
+      return c.json({ error: 'Failed to create notification' }, 500)
+    }
+    return c.json({ data }, 201)
+  },
+)
+
+// ==========================================
+// USER-FACING ROUTES (requireAuth JWT)
+// ==========================================
 
 /**
  * GET /api/notifications
  * Lists all notifications for the authenticated user.
  */
-notificationsRouter.get('/', async (c) => {
+notificationsRouter.get('/', requireAuth, async (c) => {
   const db = c.var.db
-  const authUser = c.var.authUser // Populated by requireAuth middleware
+  const authUser = c.var.authUser
 
   const data = await listNotifications(db, authUser.id)
-  return c.json({ data })
-})
-
-/**
- * POST /api/notifications
- * Creates a notification record for a specific user.
- */
-notificationsRouter.post('/', zValidator('json', createNotificationSchema), async (c) => {
-  const db = c.var.db
-  const input = c.req.valid('json')
-
-  const data = await createNotification(db, input)
-  if (!data) {
-    return c.json({ error: 'Failed to create notification' }, 500)
-  }
   return c.json({ data })
 })
 
@@ -97,7 +120,7 @@ notificationsRouter.post('/', zValidator('json', createNotificationSchema), asyn
  * PATCH /api/notifications/:id/read
  * Marks a specific notification as read.
  */
-notificationsRouter.patch('/:id/read', async (c) => {
+notificationsRouter.patch('/:id/read', requireAuth, async (c) => {
   const db = c.var.db
   const authUser = c.var.authUser
   const id = c.req.param('id')
@@ -119,7 +142,7 @@ notificationsRouter.patch('/:id/read', async (c) => {
  * POST /api/notifications/read-all
  * Marks all notifications of the authenticated user as read.
  */
-notificationsRouter.post('/read-all', async (c) => {
+notificationsRouter.post('/read-all', requireAuth, async (c) => {
   const db = c.var.db
   const authUser = c.var.authUser
 
